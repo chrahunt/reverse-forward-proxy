@@ -14,41 +14,77 @@ from . import DEFAULT_TARGET_HEADER, ENV_SSL_CERT_FILE
 logger = logging.getLogger(__name__)
 
 
-_session = requests.Session()
+_cacert_default = object()
 
 
-def make_server(server_address, proxy_address):
-    _session.proxies = {
-        'http': proxy_address,
-        'https': proxy_address,
+def make_server(
+    server_address,
+    http_proxy,
+    https_proxy=None,
+    cacert=_cacert_default,
+    target_header=DEFAULT_TARGET_HEADER,
+):
+    if cacert == _cacert_default:
+        cacert = os.environ.get(ENV_SSL_CERT_FILE, True)
+
+    defaults = {
+        'proxies': {
+            'http': http_proxy,
+            'https': https_proxy or http_proxy,
+        },
+        'verify': cacert,
     }
-    _session.verify = os.environ.get(ENV_SSL_CERT_FILE, True)
-    return ThreadingHTTPServer(server_address, ProxyRequestHandler)
+
+    Handler = get_handler(defaults, target_header)
+
+    return ThreadingHTTPServer(server_address, Handler)
+
+
+def get_handler(requests_defaults, target_header_name):
+    class Handler(ProxyRequestHandler):
+        defaults = requests_defaults
+
+        target_header = target_header_name
+
+    return Handler
 
 
 class ProxyRequestHandler(BaseHTTPRequestHandler):
     # Support headers as expected from remote peers.
     protocol_version = 'HTTP/1.1'
 
+    defaults = {}
+
+    target_header = DEFAULT_TARGET_HEADER
+
     def do_GET(self):
-        header_key = DEFAULT_TARGET_HEADER
+        # Session per request to avoid concurrency issues, see
+        # kennethreitz/requests#2766.
+        session = requests.Session()
+
+        header_key = self.target_header
         target = self.headers[header_key]
 
         if target is None:
             self.send_error(400, message=f"Expected header {header_key}.")
+            return
 
         target_url = URL(target)
 
         if not target_url.is_absolute():
             self.send_error(400, message=f"{header_key} must be absolute.")
+            return
 
         if not target_url.scheme:
             self.send_error(400, message=f"{header_key} must have scheme.")
+            return
 
         if target_url.path != '/':
             self.send_error(400, message=f"{header_key} must not have path.")
+            return
 
         # TODO: Trace incoming request info.
+        logger.info('Request for %s', self.path)
         path = URL(self.path)
 
         # Remove incoming host header, let it be populated by the client library.
@@ -67,7 +103,7 @@ class ProxyRequestHandler(BaseHTTPRequestHandler):
         prep.url = str(url)
 
         try:
-            response = _session.send(prep, stream=True)
+            response = session.send(prep, stream=True, **self.defaults)
         except requests.exceptions.ProxyError as e:
             logger.exception("Error retrieving %s", url)
             self.send_error(502, 'Bad gateway')

@@ -1,0 +1,9 @@
+#!/bin/sh
+set -ex
+# Make download test files.
+mkdir -p /www/data
+#dd if=/dev/urandom of=/www/data/file.1g bs=1024 count=1000000
+#dd if=/dev/urandom of=/www/data/file.500m bs=1024 count=500000
+dd if=/dev/urandom of=/www/data/file.100m bs=1024 count=100000
+
+exec "$@"

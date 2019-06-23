@@ -1,0 +1,18 @@
+#!/bin/sh
+set -ex
+if [ -z "$HTTP_PROXY" ]; then
+    echo "HTTP_PROXY required"
+    exit 2
+fi
+: ${HTTPS_PROXY:-$HTTP_PROXY}
+: ${REVERSE_FORWARD_PROXY_HOST:-localhost}
+: ${REVERSE_FORWARD_PROXY_PORT:-8080}
+: ${REVERSE_FORWARD_PROXY_TARGET_HEADER:-X-Reverse-Forward-Proxy-Target}
+
+echo "Running $@"
+
+if [ -n "$PROFILING" ]; then
+    exec python -m cProfile -o /proxy.prof "$@"
+else
+    exec "$@"
+fi

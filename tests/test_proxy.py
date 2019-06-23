@@ -325,9 +325,33 @@ async def test_proxy_returns_headers(client, test_server, make_aiohttp_server):
         assert resp.headers['header'] == param, f"Expected example response: {resp}"
 
 
-@pytest.mark.skip(reason='not implemented')
-async def test_proxy_respects_target_header():
-    ...
+async def test_proxy_respects_target_header(
+    client, proxy, make_aiohttp_server, tcp_ports
+):
+    app = web.Application()
+
+    async def root(request):
+        return web.Response(text='hello')
+
+    app.router.add_get('/', root)
+
+    backend_server = await make_aiohttp_server(app)
+
+    test_server_port = tcp_ports()
+
+    test_target_header = 'X-Test-Target-Header'
+
+    headers = {
+        test_target_header: str(backend_server.make_url('/')),
+    }
+
+    with make_test_server(
+        ('localhost', test_server_port), proxy.address, target_header=test_target_header
+    ) as test_server:
+        test_server.address = f'http://localhost:{test_server_port}'
+        url = f'{test_server.address}/'
+        async with client.get(url, headers=headers) as resp:
+            assert resp.status == 200
 
 
 async def test_proxy_respects_ca_file(

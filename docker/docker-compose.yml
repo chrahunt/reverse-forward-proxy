@@ -1,0 +1,17 @@
+---
+version: '3'
+services:
+    gateway:
+        image: chrahunt/reverse-forward-proxy:SNAPSHOT
+        stop_signal: SIGINT
+        ports:
+        - "8080"
+        environment:
+        - HTTP_PROXY=http://proxy:8899/
+        - PROFILING=1
+    proxy:
+        build: ./proxy
+        ports:
+        - "8899:8899"
+    files:
+        build: ./files

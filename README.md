@@ -30,3 +30,14 @@ Requests must have header `X-Reverse-Forward-Proxy-Target` set to the remote
 host to connect to via the proxy.
 
 The server will make the request via `$HTTP_PROXY` and return the response.
+
+## Testing
+
+```
+pytest
+```
+
+```
+make docker-test
+docker run --rm --net=host svagi/h2load --h1 -n 100 -c5 -H "X-Reverse-Forward-Proxy-Target: http://files/" http://localhost:$(make get-port)/file.100m
+```
